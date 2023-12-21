@@ -12,7 +12,7 @@ import torch.distributed as dist
 
 from improved_diffusion import dist_util, logger
 from improved_diffusion.script_util import (
-    NUM_CLASSES,
+    EMBED_WIDTH,
     model_and_diffusion_defaults,
     create_model_and_diffusion,
     add_dict_to_argparser,
@@ -42,20 +42,25 @@ def main():
     while len(all_images) * args.batch_size < args.num_samples:
         model_kwargs = {}
         if args.class_cond:
-            classes = th.randint(
-                low=0, high=NUM_CLASSES, size=(args.batch_size,), device=dist_util.dev()
-            )
-            model_kwargs["y"] = classes
+            # classes = th.randint(
+            #     low=0, high=EMBED_WIDTH, size=(args.batch_size,), device=dist_util.dev()
+            # ) 
+            #TODO: get CLIP embeddings from image/audio
+            embeds = None
+            model_kwargs["y"] = embeds
         sample_fn = (
             diffusion.p_sample_loop if not args.use_ddim else diffusion.ddim_sample_loop
         )
         sample = sample_fn(
             model,
-            (args.batch_size, 3, args.image_size, args.image_size),
+            (args.batch_size, 1, args.image_size, args.image_size),
             clip_denoised=args.clip_denoised,
             model_kwargs=model_kwargs,
         )
-        sample = ((sample + 1) * 127.5).clamp(0, 255).to(th.uint8)
+
+        # Denormalize values from [0, 1] to [-12, 3]
+        sample = sample * 15 - 12
+        # sample = ((sample + 1) * 127.5).clamp(0, 255).to(th.uint8)
         sample = sample.permute(0, 2, 3, 1)
         sample = sample.contiguous()
 
@@ -64,9 +69,9 @@ def main():
         all_images.extend([sample.cpu().numpy() for sample in gathered_samples])
         if args.class_cond:
             gathered_labels = [
-                th.zeros_like(classes) for _ in range(dist.get_world_size())
+                th.zeros_like(embeds) for _ in range(dist.get_world_size())
             ]
-            dist.all_gather(gathered_labels, classes)
+            dist.all_gather(gathered_labels, embeds)
             all_labels.extend([labels.cpu().numpy() for labels in gathered_labels])
         logger.log(f"created {len(all_images) * args.batch_size} samples")
 
