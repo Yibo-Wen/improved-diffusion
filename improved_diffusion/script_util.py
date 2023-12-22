@@ -5,7 +5,7 @@ from . import gaussian_diffusion as gd
 from .respace import SpacedDiffusion, space_timesteps
 from .unet import SuperResModel, UNetModel
 
-EMBED_WIDTH = 1024 # TODO: change this to xxx
+EMBED_WIDTH = 512 # TODO: change this to xxx
 
 
 def model_and_diffusion_defaults():
